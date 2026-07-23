@@ -1,4 +1,4 @@
-"""User-facing REPL helper functions for zetamac-py.
+"""User-facing REPL helper functions for zetamac-tui.
 
 These are loaded into the debug REPL session only; the app backend does not
 import or call them. They wrap common inspection and experimentation tasks.
@@ -20,7 +20,7 @@ console = Console()
 
 def runs_table(conn: sqlite3.Connection, limit: int = 10) -> list[dict[str, Any]]:
     """Print a table of recent runs and return the underlying rows."""
-    from zetamac_py.main import get_recent_runs
+    from zetamac_tui.main import get_recent_runs
 
     rows = get_recent_runs(conn, limit=limit)
     table = Table(title=f"Recent runs (limit={limit})")
@@ -38,7 +38,7 @@ def runs_table(conn: sqlite3.Connection, limit: int = 10) -> list[dict[str, Any]
 
 def show_run(conn: sqlite3.Connection, run_id: int) -> dict[str, Any] | None:
     """Print one run's metadata and per-question timeline."""
-    from zetamac_py.main import compute_timeline, get_run
+    from zetamac_tui.main import compute_timeline, get_run
 
     run = get_run(conn, run_id)
     if run is None:
@@ -64,7 +64,7 @@ def show_run(conn: sqlite3.Connection, run_id: int) -> dict[str, Any] | None:
 
 def analyze_run(conn: sqlite3.Connection, run_id: int) -> dict[str, Any] | None:
     """Print timing analytics (fastest/slowest questions) for a run."""
-    from zetamac_py.main import _analytics, get_run
+    from zetamac_tui.main import _analytics, get_run
 
     run = get_run(conn, run_id)
     if run is None:
@@ -79,7 +79,7 @@ def analyze_run(conn: sqlite3.Connection, run_id: int) -> dict[str, Any] | None:
 
 def preview_problem(settings: Any, count: int = 1) -> list[tuple[str, int]]:
     """Generate and print sample problem(s) using the current settings."""
-    from zetamac_py.main import generate_problem
+    from zetamac_tui.main import generate_problem
 
     problems: list[tuple[str, int]] = []
     for _ in range(max(1, count)):

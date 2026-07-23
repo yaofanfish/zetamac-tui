@@ -1,4 +1,4 @@
-# zetamac-py
+# zetamac-tui
 
 TUI zetamac clone (identical core interface) plus SQLite tracking, replay, and flash anzan (also mental arithmetic), built with [Textual](https://github.com/Textualize/textual).
 
@@ -8,10 +8,10 @@ TUI zetamac clone (identical core interface) plus SQLite tracking, replay, and f
 
 ## Screenshots
 
-<!-- https://raw.githubusercontent.com/yaofanfish/zetamac-py/refs/heads/main -->
-![Settings](https://raw.githubusercontent.com/yaofanfish/zetamac-py/refs/heads/main/assets/63dd43f7-3f04-4e29-a218-b13fdf09415e.png)
-![Play](https://raw.githubusercontent.com/yaofanfish/zetamac-py/refs/heads/main/assets/16c844ea-70ce-4e1a-9d76-011f095fc959.png)
-![View runs](https://raw.githubusercontent.com/yaofanfish/zetamac-py/refs/heads/main/assets/c63567db-c70a-4e45-a05c-efcdf6736680.png)
+<!-- https://raw.githubusercontent.com/yaofanfish/zetamac-tui/refs/heads/main -->
+![Settings](https://raw.githubusercontent.com/yaofanfish/zetamac-tui/refs/heads/main/assets/63dd43f7-3f04-4e29-a218-b13fdf09415e.png)
+![Play](https://raw.githubusercontent.com/yaofanfish/zetamac-tui/refs/heads/main/assets/16c844ea-70ce-4e1a-9d76-011f095fc959.png)
+![View runs](https://raw.githubusercontent.com/yaofanfish/zetamac-tui/refs/heads/main/assets/c63567db-c70a-4e45-a05c-efcdf6736680.png)
 
 ## Features
 
@@ -33,13 +33,13 @@ Requires Python 3.10+.
 ### Install from PyPI (recommended) - pipx
 
 ```bash
-pipx install "zetamac-py[opt]"
+pipx install "zetamac-tui[opt]"
 ```
 
 ### Using pip
 
 ```bash
-pip install "zetamac-py[opt]"
+pip install "zetamac-tui[opt]"
 ```
 
 ---
@@ -47,15 +47,15 @@ pip install "zetamac-py[opt]"
 ### Install from github
 
 ```bash
-git clone https://github.com/yaofanfish/zetamac-py.git
-cd zetamac-py
+git clone https://github.com/yaofanfish/zetamac-tui.git
+cd zetamac-tui
 pipx install -e ".[opt]"
 ```
 
 ## Usage
 
 ```bash
-zetamac-py
+zetamac-tui
 ```
 The interface is generally straightforward, and as mentioned before, the core is identical to the web zetamac. 
 Configure settings, start a round, review past runs, or replay difficult questions directly from the menu.
@@ -63,21 +63,21 @@ Configure settings, start a round, review past runs, or replay difficult questio
 ## Data Storage
 
 (
-	On windows, replace ~ with %USERPROFILE%\AppData\Local\zetamac-py, so settings would be C:\Users\DemoUser\AppData\Local\zetamac-py\.local\state\zetamac-py\settings.json
+	On windows, replace ~ with %USERPROFILE%\AppData\Local\zetamac-tui, so settings would be C:\Users\DemoUser\AppData\Local\zetamac-tui\.local\state\zetamac-tui\settings.json
 	It is linux first, so the paths are a bit awkward. 
 )
 
-* Settings: `~/.local/state/zetamac-py/settings.json`
-* Run history: `~/.local/share/zetamac-py/runs.db`
-* Python rc file: `~/.config/zetamac-py/pyrc.py`
+* Settings: `~/.local/state/zetamac-tui/settings.json`
+* Run history: `~/.local/share/zetamac-tui/runs.db`
+* Python rc file: `~/.config/zetamac-tui/pyrc.py`
 
 ## Contributing
 
 Issues and pull requests are welcome.
 
 ```bash
-git clone https://github.com/yaofanfish/zetamac-py.git
-cd zetamac-py
+git clone https://github.com/yaofanfish/zetamac-tui.git
+cd zetamac-tui
 pip install -e ".[dev,opt]"
 ```
 

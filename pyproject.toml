@@ -1,7 +1,7 @@
 [project]
-name = "zetamac-py"
-version = "0.1.2"
-description = "TUI zetamac clone (identical core interface) plus SQLite tracking, replay, and flash anzan (also mental arithmetic)"
+name = "zetamac-tui"
+version = "0.3.0"
+description = "Zetamac clone (identical core interface) plus SQLite tracking, replay, and flash anzan (also mental arithmetic)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "GPL-3.0-or-later" }
@@ -28,12 +28,12 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yaofanfish/zetamac-py"
-Repository = "https://github.com/yaofanfish/zetamac-py"
+Homepage = "https://github.com/yaofanfish/zetamac-tui"
+Repository = "https://github.com/yaofanfish/zetamac-tui"
 
 [project.scripts]
-zetamac-py = "zetamac_py.main:main"
-zeta = "zetamac_py.main:main" # alias
+zetamac-tui = "zetamac_tui.main:main"
+zeta = "zetamac_tui.main:main" # alias
 
 [project.optional-dependencies]
 dev = [
@@ -50,4 +50,4 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/zetamac_py"]
+packages = ["src/zetamac_tui"]

@@ -6,12 +6,10 @@ import json
 import math
 import random
 import sqlite3
-import sys, os, subprocess
+import sys, os
 import time
-import datetime
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
-from typing import Any, Dict
 
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal
@@ -19,30 +17,22 @@ from textual.screen import ModalScreen, Screen
 from textual.widgets import Button, Checkbox, Input, Label, ListItem, ListView, Static
 from textual.binding import Binding
 from textual import events, on
-import textual
-
-import code, inspect
-
-import runpy
 
 import rich, rich.console, rich.text
 
-import asyncio, signal
-
-import tempfile, shutil
+import asyncio
 
 sys.path.append(str(Path(__file__).parent.resolve()))
 
 console = rich.console.Console()
 
-import zetamac_py_doc
 import presets
 from presets import DEFAULT_SETTINGS, _DEFAULT_RUN
 
 
 # NOTE: data_anlysis.py
 
-def _analytics(json_str: str, id: Any = None) -> dict:
+def _analytics(json_str: str, id = None) -> dict:
     raw_logs = json.loads(json_str)
 
     timeline = []
@@ -99,7 +89,7 @@ def _analytics(json_str: str, id: Any = None) -> dict:
         }
     }
 
-def _analytics_summary_(json_str, id: Any = None) -> str:
+def _analytics_summary_(json_str, id = None) -> str:
     if type(json_str) != str:
         json_str = json.dumps(json_str)
     a = _analytics(json_str, id)
@@ -122,8 +112,13 @@ def _analytics_summary_(json_str, id: Any = None) -> str:
 
 
 def ids_info(conn=None):
-    if conn is None:
-        conn = globals()["conn"]
+    if conn is None: # conn should always be passed in actual code, this is just a workaround for the user calling in the repl
+        try:
+            conn = globals()["conn"]
+            if type(conn) != sqlite3.Connection:
+                raise Exception("not a conn")
+        except:
+            conn = sqlite3.connect(LOCALSHAREDIR / "runs.db")
 
     today = datetime.date.today().isoformat()
     tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
@@ -189,29 +184,44 @@ def run_max_today(conn=None):
 
 # NOTE: END: data_analysis.py
 
+import importlib.util
+
+def lazy_import(name):
+    spec = importlib.util.find_spec(name)
+    loader = importlib.util.LazyLoader(spec.loader)
+    spec.loader = loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    loader.exec_module(module)
+    return module
+
+# lazy_import modules that aren't used on startup
+
+datetime = lazy_import("datetime")
+tempfile = lazy_import("tempfile")
+signal = lazy_import("signal")
+subprocess = lazy_import("subprocess")
 
 
+HOME = (Path.home() / "Appdata" / "Local" / "zetamac-tui" if os.name == "nt" else Path.home()).resolve()
 
-HOME = (Path.home() / "Appdata" / "Local" / "zetamac-py" if os.name == "nt" else Path.home()).resolve()
+CONFIGDIR = HOME / ".config" / "zetamac-tui"
 
-CONFIGDIR = HOME / ".config" / "zetamac-py"
+LOCALSHAREDIR = HOME / ".local" / "share" / "zetamac-tui"
 
-LOCALSHAREDIR = HOME / ".local" / "share" / "zetamac-py"
-
-LOCALSTATEDIR = HOME / ".local" / "state" / "zetamac-py"
+LOCALSTATEDIR = HOME / ".local" / "state" / "zetamac-tui"
 
 SETTINGSFILE = LOCALSTATEDIR / "settings.json"
 
 try:
-    dbgf = open("/tmp/zetamac-py-debug.log", "w", encoding="utf-8", buffering=1)
+    dbgf = open("/tmp/zetamac-tui-debug.log", "w", encoding="utf-8", buffering=1)
 except:
     # windows / error occurred
     dbgf = sys.stderr
-dbg = {}
 
 @dataclass
 class Settings:
-    """Game configuration (see zetamac_py_doc.SETTINGS_DOC)."""
+    """Game configuration (see zetamac_tui_doc.SETTINGS_DOC)."""
     game_duration: float = 120.0
     cheat_mode: bool = False
     no_log: int = 0
@@ -223,11 +233,11 @@ class Settings:
     flash_number: int = 10
     save_settings_state: bool = True
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict:
         return asdict(self)
 
 
-def sql_sh(conn=(HOME / ".local" / "share" / "zetamac-py" / "runs.db")):
+def sql_sh(conn=(HOME / ".local" / "share" / "zetamac-tui" / "runs.db")):
     if type(conn) == sqlite3.Connection:
         path = conn.execute(
             "SELECT file FROM pragma_database_list WHERE name = 'main';"
@@ -238,8 +248,8 @@ def sql_sh(conn=(HOME / ".local" / "share" / "zetamac-py" / "runs.db")):
     old_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
     try:
         subprocess.run(["sqlite3", path])
-    except Exception:
-        pass
+    except Exception as e:
+        dbgf.write(f"sql_sh: Exception - {e}\n")
     finally:
         signal.signal(signal.SIGINT, old_handler)
 """
@@ -249,7 +259,7 @@ Needs some weird signal workarounds due to a race condition
 
 
 class AppState:
-    """Persistent settings and DB connection (see zetamac_py_doc.APP_STATE_DOC)."""
+    """Persistent settings and DB connection (see zetamac_tui_doc.APP_STATE_DOC)."""
     def __init__(self) -> None:
         self.home = HOME
         self.config_dir = CONFIGDIR
@@ -436,13 +446,13 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def get_recent_runs(conn: sqlite3.Connection, limit: int = 10) -> list[dict[str, Any]]:
+def get_recent_runs(conn: sqlite3.Connection, limit: int = 10) -> list[dict]:
     ensure_schema(conn)
     rows = conn.execute(
         "SELECT id, ts, score FROM runs ORDER BY id DESC LIMIT ?",
         (limit,),
     ).fetchall()
-    result: list[dict[str, Any]] = []
+    result: list[dict] = []
     for row in rows:
         if isinstance(row, sqlite3.Row):
             result.append(dict(row))
@@ -451,12 +461,12 @@ def get_recent_runs(conn: sqlite3.Connection, limit: int = 10) -> list[dict[str,
     return result
 
 
-def get_all_run_metadata(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+def get_all_run_metadata(conn: sqlite3.Connection) -> list[dict]:
     ensure_schema(conn)
     rows = conn.execute(
         "SELECT id, ts, score FROM runs ORDER BY id DESC",
     ).fetchall()
-    result: list[dict[str, Any]] = []
+    result: list[dict] = []
     for row in rows:
         if isinstance(row, sqlite3.Row):
             result.append(dict(row))
@@ -465,7 +475,7 @@ def get_all_run_metadata(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return result
 
 
-def get_run(conn: sqlite3.Connection, run_id: int) -> dict[str, Any] | None:
+def get_run(conn: sqlite3.Connection, run_id: int) -> dict | None:
     ensure_schema(conn)
     row = conn.execute(
         "SELECT id, ts, score, logs FROM runs WHERE id = ?",
@@ -479,10 +489,10 @@ def get_run(conn: sqlite3.Connection, run_id: int) -> dict[str, Any] | None:
     return result
 
 
-def get_all_runs(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+def get_all_runs(conn: sqlite3.Connection) -> list[dict]:
     ensure_schema(conn)
     rows = conn.execute("SELECT id, ts, score, logs FROM runs ORDER BY id ASC").fetchall()
-    result: list[dict[str, Any]] = []
+    result: list[dict] = []
     for row in rows:
         item = dict(row)
         if item.get("logs"):
@@ -582,6 +592,7 @@ async def beep(duration: float = 1.0) -> None:
     print("\a")
         
 def open_file(tempfname):
+    import shutil
     try:
         editors = [f"{os.getenv('EDITOR', 'nvim')}", "xdg-open", "open", "notepad.exe", "nvim", "vim", "nano", "vi"]
         for editor in editors:
@@ -959,13 +970,13 @@ class PlayScreen(Screen):
         self.question_deadline = 0.0
         self.round_running = False
         self.round_logs: dict[str, str] = {}
-        self._tick_timer: Any | None = None
+        self._tick_timer = None
 
     def compose(self) -> ComposeResult:
         yield Container(
             Container(
                 Label("Seconds used: --" if self.is_replay else "Seconds left: --", id="time-left"),
-                Label("Score: 0", id="score-right"),
+                Label(f"Replayed: 0 / {self.replay_stats['question_number']}" if self.is_replay else "Score: 0", id="score-right"),
                 id="hud",
             ),
             Container(
@@ -1038,7 +1049,7 @@ class PlayScreen(Screen):
         if math.isfinite(value) and abs(value - answer) < 1e-9:
             self.score += 1
             self.round_logs[str(round(self.elapsed, 3))] = self.current_problem[0]
-            self.query_one("#score-right", Label).update(f"Score: {self.score}")
+            self.query_one("#score-right", Label).update(f"Score: {self.score}" if not self.is_replay else f"Replayed: {self.score} / {self.replay_stats['question_number']}")
             self.next_question()
         else:
             pass
@@ -1119,6 +1130,10 @@ class PlayScreen(Screen):
 
 
 class ReplaySelectionScreen(Screen):
+    PAGE_SIZE = 32
+    LOAD_AHEAD = 8
+    BINDINGS = [Binding("delete", "request_delete", "Delete run")]
+
     CSS = """
     ReplaySelectionScreen { background: #111111; color: white; padding: 1 2; }
     #replay-select-root { width: 100%; height: 100%; }
@@ -1147,14 +1162,20 @@ class ReplaySelectionScreen(Screen):
     }
     """
 
-    def __init__(self, parent_view: "MainView", available_runs: list[dict[str, Any]], default_id: int, mode: str = "replay") -> None:
+    def __init__(self, parent_view: "MainView", available_runs: list[dict], default_id: int, mode: str = "replay") -> None:
         super().__init__()
         self.parent_view = parent_view
-        self.available_runs = available_runs
+        # Metadata is deliberately fetched in pages below.  ``available_runs``
+        # remains an argument for compatibility with the callers, but retaining
+        # it here would keep the full history in the widget unnecessarily.
+        self.available_runs: list[dict] = []
+        self._loaded_runs = 0
+        self._has_more_runs = True
         self.default_id = default_id
         self.mode = mode
         self.selected_run_id: int | None = None
         self.last_selected: int | None = None
+        self._pending_delete_id: int | None = None
 
     def compose(self) -> ComposeResult:
         with Container(id="replay-select-root"):
@@ -1165,10 +1186,6 @@ class ReplaySelectionScreen(Screen):
             with Horizontal(id="pane-row"):
                 with Container(id="run-pane"):
                     yield ListView(
-                        *[
-                            ListItem(Label(f"{run['id']} | score={run['score']} | ts={run['ts']}"))
-                            for run in self.available_runs
-                        ],
                         id="run-list",
                     )
                     with Horizontal(id="run-controls"):
@@ -1181,11 +1198,48 @@ class ReplaySelectionScreen(Screen):
 
     def on_mount(self) -> None:
         run_list = self.query_one("#run-list", ListView)
-        run_list.index = 0
         run_list.focus()
+        self._load_more_runs()
         if self.available_runs:
+            run_list.index = 0
             self.selected_run_id = int(self.available_runs[0]["id"])
             self._refresh_summary(self.selected_run_id)
+
+    def _load_more_runs(self) -> None:
+        """Append one metadata page, newest runs first."""
+        if not self._has_more_runs:
+            return
+        rows = self.parent_view.state.conn.execute(
+            "SELECT id, ts, score FROM runs ORDER BY id DESC LIMIT ? OFFSET ?",
+            (self.PAGE_SIZE, self._loaded_runs),
+        ).fetchall()
+        page = [dict(row) for row in rows]
+        self._loaded_runs += len(page)
+        self._has_more_runs = len(page) == self.PAGE_SIZE
+        if not page:
+            return
+        self.available_runs.extend(page)
+        run_list = self.query_one("#run-list", ListView)
+        for run in page:
+            run_list.append(
+                ListItem(Label(f"{run['id']} | score={run['score']} | ts={run['ts']}"))
+            )
+
+    def _load_more_if_needed(self, index: int) -> None:
+        if self._has_more_runs and index >= len(self.available_runs) - self.LOAD_AHEAD:
+            self._load_more_runs()
+
+    @on(ListView.Highlighted)
+    def on_run_highlighted(self, event: ListView.Highlighted) -> None:
+        if event.list_view.id != "run-list":
+            return
+        index = event.list_view.index
+        if index is None or index < 0 or index >= len(self.available_runs):
+            return
+        self.selected_run_id = int(self.available_runs[index]["id"])
+        self._pending_delete_id = None
+        self._refresh_summary(self.selected_run_id)
+        self._load_more_if_needed(index)
 
     @on(ListView.Selected)
     def on_run_selected(self, event: ListView.Selected) -> None:
@@ -1195,9 +1249,7 @@ class ReplaySelectionScreen(Screen):
         index = event.list_view.index
         if index is None or index < 0 or index >= len(self.available_runs):
             return
-        run_meta = self.available_runs[index]
-        self.selected_run_id = int(run_meta["id"])
-        self._refresh_summary(self.selected_run_id)
+        self._load_more_if_needed(index)
 
     def _refresh_summary(self, run_id: int) -> None:
         run = get_run(self.parent_view.state.conn, run_id)
@@ -1227,7 +1279,7 @@ class ReplaySelectionScreen(Screen):
 
         try:
             with self.app.suspend():
-                tempf = tempfile.NamedTemporaryFile(prefix="zetamac-py_", suffix=".json")
+                tempf = tempfile.NamedTemporaryFile(prefix="zetamac-tui_", suffix=".json")
                 tempf.write(json.dumps(run, indent="\t").encode("utf-8"))
                 tempf.flush()
                 open_file(tempf.name)
@@ -1250,6 +1302,41 @@ class ReplaySelectionScreen(Screen):
         if self.selected_run_id is None:
             return
         self._select_or_activate(self.selected_run_id)
+
+    def action_request_delete(self) -> None:
+        """Require a second Delete press before permanently removing a run."""
+        if self.selected_run_id is None:
+            return
+        if self._pending_delete_id != self.selected_run_id:
+            self._pending_delete_id = self.selected_run_id
+            self.query_one("#run-summary", Static).update(
+                f"Delete run {self.selected_run_id}? Press Delete again to confirm."
+            )
+            return
+
+        run_id = self.selected_run_id
+        self.parent_view.state.conn.execute("DELETE FROM runs WHERE id = ?", (run_id,))
+        self.parent_view.state.conn.commit()
+        index = next(
+            index for index, run in enumerate(self.available_runs)
+            if int(run["id"]) == run_id
+        )
+        del self.available_runs[index]
+        self._loaded_runs -= 1
+        self._pending_delete_id = None
+        self.last_selected = None
+        run_list = self.query_one("#run-list", ListView)
+        run_list.remove_items([index])
+
+        if not self.available_runs:
+            self.selected_run_id = None
+            self.query_one("#run-summary", Static).update("No runs available.")
+            return
+        new_index = min(index, len(self.available_runs) - 1)
+        run_list.index = new_index
+        self.selected_run_id = int(self.available_runs[new_index]["id"])
+        self._refresh_summary(self.selected_run_id)
+        self._load_more_if_needed(new_index)
 
     @on(events.Click, "#run-list")
     def on_run_list_click(self, event: events.Click) -> None:
@@ -1346,7 +1433,7 @@ class FlashAnzan(Screen):
         self.total = 0
         self.playing = True
         self.awaiting_answer = False
-        self._flash_worker: Any | None = None
+        self._flash_worker = None
 
     def compose(self) -> ComposeResult:
         yield Horizontal(
@@ -1490,7 +1577,7 @@ class MainView(App):
 
     def compose(self) -> ComposeResult:
         with Container(id="root"):
-            yield Label("zetamac-py, on yaofanfish/zetamac-py", id="title")
+            yield Label("zetamac-tui, on yaofanfish/zetamac-tui", id="title")
             yield Label("Use ↑/↓ or j/k to move, Enter to select.", id="status")
             yield ListView(*[ListItem(Label(item)) for item in self.menu_items], id="menu-list")
             yield Label("", id="detail")
@@ -1607,12 +1694,17 @@ class MainView(App):
         _manual_wildcard_import("userfuncs", globals())
         import presets
 
+        import zetamac_tui_doc
+        zetamac_tui_doc.apply_repl_docs(globals())
+
+        import code
+
         repl_locals = dict(globals(), **locals())
         repl_locals.update({
             "state": self.state,
             "settings": self.settings,
             "conn": self.state.conn,
-            "help": zetamac_py_doc.ReplHelp(),
+            "help": zetamac_tui_doc.ReplHelp(),
         })
         banner = f"Python {sys.version} on {sys.platform}. \nEntering zetamac shell; Type help() to see what's available.\n"
 
@@ -1630,12 +1722,6 @@ class MainView(App):
         if run is None:
             self.query_one("#detail", Label).update("No runs available yet.")
             return
-        dbg["push_screen_args"] = {
-                "self": "self",
-                "problem_factory": ReplayProblemFactory(run.get("logs") or {}),
-                "should_log": False,
-                "stuff": run.get("logs"), # run is a dict with keys: id, ts, score, logs
-        }
         self.settings.no_log += 2
         self.push_screen(
             PlayScreen(
@@ -1681,7 +1767,7 @@ class MainView(App):
 
 
 class ReplayProblemFactory:
-    def __init__(self, logs: dict[str, Any]) -> None:
+    def __init__(self, logs: dict) -> None:
         self.timeline = compute_timeline(logs or {})
         self.index = 0
 
@@ -1741,26 +1827,6 @@ def build_hardest_replay_logs(runs):
 
     return replay_logs, cumulative_time
 
-def _load_userfuncs() -> dict[str, Any]:
-    """Load optional REPL helper functions from __pycache__/userfuncs.py."""
-    import importlib.util
-    import types
-
-    path = Path(__file__).parent / "__pycache__" / "userfuncs.py"
-    if not path.is_file():
-        return {}
-    spec = importlib.util.spec_from_file_location("zetamac_userfuncs", path)
-    if spec is None or spec.loader is None:
-        return {}
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return {
-        name: value
-        for name, value in vars(module).items()
-        if not name.startswith("_") and isinstance(value, types.FunctionType)
-    }
-
-
 def run_demo() -> None:
     state = AppState()
     settings = state.settings
@@ -1786,16 +1852,11 @@ def main() -> None:
         import miniaudio
         import pyfiglet
     except:
-        print("\x1b[31mYou have not installed the [opt] dependencies for this project, which means that some features may not work as well for you. If you change you mind, run\n\tpipx install -e zetamac-py[opt] # do [dev,opt] if you want the dev stuff too")
+        print("\x1b[31mYou have not installed the [opt] dependencies for this project, which means that some features may not work as well for you. If you change you mind, run\n\tpipx install -e zetamac-tui[opt] # do [dev,opt] if you want the dev stuff too")
 
-
-zetamac_py_doc.apply_repl_docs(globals())
 
 if __name__ == "__main__":
     main()
-#    code.interact(local=dict(globals(), **locals()))
-
-
 
 
 

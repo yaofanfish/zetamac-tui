@@ -1,4 +1,4 @@
-"""REPL documentation heredocs for zetamac-py.
+"""REPL documentation heredocs for zetamac-tui.
 
 Doc strings defined here are attached to the corresponding objects in
 main.py so that help(<name>) in the debug REPL shows useful reference text.
@@ -24,7 +24,7 @@ Attributes:
     overrides (dict[str, str]): Named hooks for custom operand generators.
     save_settings_state (bool): When False, in-app edits are not persisted.
 
-Loaded from ~/.config/zetamac-py/settings.json via AppState.load_settings().
+Loaded from ~/.config/zetamac-tui/settings.json via AppState.load_settings().
 Persist changes with state.save_settings() after editing the in-memory instance.
 
 Example:
@@ -40,8 +40,8 @@ AppState -- persistent settings and sqlite3 connection for the running app.
 Attributes:
     settings (Settings): Current game configuration (mutate, then save_settings()).
     conn (sqlite3.Connection): Open connection to runs.db (table: runs).
-    config_path (Path): Path to settings.json (~/.config/zetamac-py/settings.json).
-    db_path (Path): Path to runs.db (~/.local/share/zetamac-py/runs.db).
+    config_path (Path): Path to settings.json (~/.config/zetamac-tui/settings.json).
+    db_path (Path): Path to runs.db (~/.local/share/zetamac-tui/runs.db).
     config_dir (Path): Parent directory of settings.json.
     home (Path): Resolved home directory for config/data paths.
 
@@ -193,7 +193,7 @@ Returns:
 
 
 REPL_BANNER = """
-zetamac-py debug REPL
+zetamac-tui debug REPL
 =====================
 Type help() for a quick reference of variables and functions in this session.
 Type help(<name>) for docs on settings, record_run, AppState, etc.
@@ -202,7 +202,7 @@ Type exit() or Ctrl-D to return to the game.
 
 
 class ReplHelp:
-    """Custom help() for the zetamac-py debug REPL.
+    """Custom help() for the zetamac-tui debug REPL.
 
     Calling help() with no arguments prints a cheat sheet of what's
     available in this session (state, settings, conn, helper functions).
@@ -212,7 +212,7 @@ class ReplHelp:
     """
 
     _OVERVIEW = """
-zetamac-py semi-internals (intentially exposed functions for the user) -- quick reference
+zetamac-tui semi-internals (intentially exposed functions for the user) -- quick reference
 ===================================
 
 Variables available in this session:
@@ -273,7 +273,7 @@ Type exit() or press Ctrl-D to leave the REPL and return to the game.
         return pydoc.help(*args, **kwargs)
 
     def __repr__(self) -> str:
-        return "Type help() for zetamac-py REPL help, or help(x) for help about x."
+        return "Type help() for zetamac-tui REPL help, or help(x) for help about x."
 
 
 def apply_repl_docs(namespace: dict[str, Any]) -> None:

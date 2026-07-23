@@ -1,5 +1,5 @@
 .venv/
 **/__pycache__/
-src/zetamac-py/localshare
-src/zetamac-py/config
-README.html
+src/zetamac_tui/localshare
+src/zetamac_tui/config
+src/zetamac_tui/tests
