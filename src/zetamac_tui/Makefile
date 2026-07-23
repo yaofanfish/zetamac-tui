@@ -1,5 +1,5 @@
 
-BINARY_NAME=my_textual_app
+BINARY_NAME=nuitka_exe
 
 all: build
 
@@ -9,7 +9,6 @@ build:
 		--onefile \
 		--include-package=textual \
 		--include-package=rich \
-		--include-data-files=*.tcss=./ \
 		--assume-yes-for-downloads \
 		--output-filename=$(BINARY_NAME) \
 		main.py

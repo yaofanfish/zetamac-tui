@@ -616,7 +616,7 @@ class SettingsScreen(Screen):
 
     BINDINGS = [
          ("ctrl+s", "save", "Save"),
-         ("ctrl+enter", "save_and_play", "Save and play"),
+         ("5", "save_and_play", "Save and play"),
          ("ctrl+d", "defaults", "Defaults"),
          ("p", "focus_presets", "Focus onto presets input"),
          ("escape", "cancel", "Cancel"),
@@ -1108,7 +1108,7 @@ class PlayScreen(Screen):
             special_bit = f"You would have scored {(self.score * self.replay_stats['time_taken'] / (self.elapsed or 0.01)):.2f} with the normal time. " if self.replay_stats["type"] == "replay" else f"Originally, you took {'around ' if quit_requested else ''}{(self.replay_stats['time_taken'] * self.score / self.replay_stats['question_number']):.2f} seconds. "
             detail = f"{header}\n\nTime taken: {self.elapsed:.2f}s\n" + special_bit + f"\nSummary:\n{summary}"
         else:
-            detail = f"{header}\n{'Logged run!' if logged else 'On this pace, you would have scored ~' + str(round(self.score * 120 / self.elapsed, 2)) + ' if you had finished the run. ' if quit_requested else ''}\nScore: {self.score}\nSummary:\n{summary}"
+            detail = f"{header}\n{'Logged run!' if logged else 'On this pace, you would have scored ~' + str(round(self.score * 120 / self.elapsed, 2)) + f' if you had finished the run. ' if quit_requested else ''}\nScore: {self.score}{f'; Time taken: {self.elapsed:.1f}' if quit_requested else ''}\nSummary:\n{summary}"
         self.parent_view.query_one("#detail", Label).update(detail)
         self.app.pop_screen()
 

@@ -3,3 +3,7 @@
 src/zetamac_tui/localshare
 src/zetamac_tui/config
 src/zetamac_tui/tests
+src/zetamac_tui/nuika_exe
+*.build/
+*.dist/
+*.onefile-build/
