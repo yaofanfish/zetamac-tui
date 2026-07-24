@@ -8,3 +8,4 @@ src/zetamac_tui/Makefile
 *.build/
 *.dist/
 *.onefile-build/
+dist/
