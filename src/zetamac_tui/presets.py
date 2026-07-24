@@ -15,7 +15,9 @@ DEFAULT_SETTINGS = {
 	"flash_digits": 1,
 	"flash_duration": 1.0,
 	"flash_number": 10,
+	"flash_volume": 100,
     "save_settings_state": True,
+    "generation_function": None
 }
 """
 The default settings. 
@@ -26,6 +28,7 @@ _DEFAULT_RUN = {
 	"addition_bounds": [2, 100, 2, 100],
 	"multiplication_bounds": [2, 12, 2, 100],
 	"operations": ["+", "-", "*", "/"],
+    "generation_function": None,
 }
 
 pre0 = DEFAULT_SETTINGS # quick alias
@@ -33,6 +36,7 @@ pre0 = DEFAULT_SETTINGS # quick alias
 pre1 = {
 	"multiplication_bounds": [2, 12, 13, 20],
 	"operations": ["*"],
+    "generation_function": None,
 }
 """
 Times tables of (2 to 12) × (13 to 20)
@@ -42,6 +46,7 @@ Helpful to rote memorise times tables to 12x20
 pre2 = {
 	"multiplication_bounds": [12, 12, 2, 100],
 	"operations": ["/"],
+    "generation_function": None,
 }
 """
 Division of (2 to 100) ÷ 12
@@ -51,11 +56,13 @@ Often steals time from your run
 pre3 = {
     "multiplication_bounds": [99, 99, 2, 12],
     "operations": ['*', '/'],
+    "generation_function": None,
 }
 
 pre4 = {
 	"multiplication_bounds": [1, 12, 1, 12],
-	"operations": ["*", "/"]
+	"operations": ["*", "/"],
+    "generation_function": None,
 }
 """
 1-12 times tables

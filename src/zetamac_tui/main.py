@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import json
 import math
-import random
 import sqlite3
 import sys, os
-import time
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
+import array
 
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal
@@ -19,7 +18,6 @@ from textual.binding import Binding
 from textual import events, on
 
 import rich, rich.console, rich.text
-
 import asyncio
 
 sys.path.append(str(Path(__file__).parent.resolve()))
@@ -29,11 +27,33 @@ console = rich.console.Console()
 import presets
 from presets import DEFAULT_SETTINGS, _DEFAULT_RUN
 
+# lazy_import modules that aren't used on startup, to make startup snappier
+
+import importlib.util
+
+def lazy_import(name):
+    spec = importlib.util.find_spec(name)
+    loader = importlib.util.LazyLoader(spec.loader)
+    spec.loader = loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    loader.exec_module(module)
+    return module
+
+datetime = lazy_import("datetime")
+tempfile = lazy_import("tempfile")
+signal = lazy_import("signal")
+subprocess = lazy_import("subprocess")
+time = lazy_import("time")
+random = lazy_import("random")
 
 # NOTE: data_anlysis.py
 
-def _analytics(json_str: str, id = None) -> dict:
-    raw_logs = json.loads(json_str)
+def _analytics(json_logs, id = None) -> dict:
+    if type(json_logs) in (list, dict):
+        raw_logs = json_logs
+    else:
+        raw_logs = json.loads(str(json_logs))
 
     timeline = []
     for ts_str, eq in raw_logs.items():
@@ -89,10 +109,8 @@ def _analytics(json_str: str, id = None) -> dict:
         }
     }
 
-def _analytics_summary_(json_str, id = None) -> str:
-    if type(json_str) != str:
-        json_str = json.dumps(json_str)
-    a = _analytics(json_str, id)
+def _analytics_summary_(json_logs, id = None) -> str:
+    a = _analytics(json_logs, id)
     s = a["summary"]
     for i in range(len(s["fastest"])):
         s["fastest"][i] = f"\x1b[32m{s['fastest'][i][0]}\x1b[0m: \x1b[36m{s['fastest'][i][1]}\x1b[0m"
@@ -106,7 +124,7 @@ def _analytics_summary_(json_str, id = None) -> str:
 
     dbgf.write(f"raw summary: {summary}\n")
 
-    summary = summary.replace(r"\u001b", "\u001b")
+    summary = summary.replace(r"\u001b", "\u001b") # rich prints escape sequences in json literally, so fix that
     
     return summary
 
@@ -184,23 +202,7 @@ def run_max_today(conn=None):
 
 # NOTE: END: data_analysis.py
 
-import importlib.util
 
-def lazy_import(name):
-    spec = importlib.util.find_spec(name)
-    loader = importlib.util.LazyLoader(spec.loader)
-    spec.loader = loader
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    loader.exec_module(module)
-    return module
-
-# lazy_import modules that aren't used on startup
-
-datetime = lazy_import("datetime")
-tempfile = lazy_import("tempfile")
-signal = lazy_import("signal")
-subprocess = lazy_import("subprocess")
 
 
 HOME = (Path.home() / "Appdata" / "Local" / "zetamac-tui" if os.name == "nt" else Path.home()).resolve()
@@ -212,6 +214,8 @@ LOCALSHAREDIR = HOME / ".local" / "share" / "zetamac-tui"
 LOCALSTATEDIR = HOME / ".local" / "state" / "zetamac-tui"
 
 SETTINGSFILE = LOCALSTATEDIR / "settings.json"
+
+RCFILE = CONFIGDIR / "pyrc.py"
 
 try:
     dbgf = open("/tmp/zetamac-tui-debug.log", "w", encoding="utf-8", buffering=1)
@@ -231,11 +235,20 @@ class Settings:
     flash_digits: int = 1
     flash_duration: float = 1.0
     flash_number: int = 10
+    flash_volume: int = 100
     save_settings_state: bool = True
+    # The generator is persisted as the global function name string.
+    # At runtime it is resolved back to the callable.
+    generation_function: str | None = field(default=None, repr=False, compare=False)
 
     def to_dict(self) -> dict:
-        return asdict(self)
-
+        data = asdict(self)
+        gf = data.get("generation_function")
+        if callable(gf):
+            data["generation_function"] = gf.__name__
+        elif gf is not None and not isinstance(gf, str):
+            data["generation_function"] = None
+        return data
 
 def sql_sh(conn=(HOME / ".local" / "share" / "zetamac-tui" / "runs.db")):
     if type(conn) == sqlite3.Connection:
@@ -260,14 +273,17 @@ Needs some weird signal workarounds due to a race condition
 
 class AppState:
     """Persistent settings and DB connection (see zetamac_tui_doc.APP_STATE_DOC)."""
-    def __init__(self) -> None:
+    def __init__(self, config_dir: str | Path | None = None, db_path: str | Path | None = None) -> None:
         self.home = HOME
-        self.config_dir = CONFIGDIR
+        # allow tests and callers to override locations
+        self.config_dir = Path(config_dir) if config_dir is not None else CONFIGDIR
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self.localstate_dir = LOCALSTATEDIR
         self.localstate_dir.mkdir(parents=True, exist_ok=True)
-        self.config_path = SETTINGSFILE
-        self.db_path = LOCALSHAREDIR / "runs.db"
+        # settings file lives inside the config dir
+        self.config_path = Path(self.config_dir) / "settings.json"
+        # allow overriding database path for tests
+        self.db_path = Path(db_path) if db_path is not None else (LOCALSHAREDIR / "runs.db")
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.settings = self.load_settings()
         self.conn = self.open_db()
@@ -283,22 +299,54 @@ class AppState:
             try:
                 with self.config_path.open("r", encoding="utf-8") as handle:
                     raw = json.load(handle)
+                if not isinstance(raw, dict):
+                    raise ValueError("settings JSON must contain an object")
+                # generation_function is persisted as the global function name.
                 allowed = set(Settings.__dataclass_fields__.keys())
                 filtered = {k: v for k, v in raw.items() if k in allowed}
                 merged = dict(default_dict)
                 for key, value in filtered.items():
-                    if key == "operations":
-                        if isinstance(value, list) and set(value).issubset({"+", "-", "*", "/"}):
+                    if key == "generation_function":
+                        merged[key] = value if isinstance(value, str) else None
+                    elif key == "operations":
+                        # require a complete, valid operations list; partial legacy
+                        # configs should fall back to defaults to avoid UI errors
+                        if (
+                            isinstance(value, list)
+                            and set(value) == {"+", "-", "*", "/"}
+                            and all(isinstance(item, str) for item in value)
+                        ):
                             merged[key] = list(value)
                         else:
                             merged[key] = list(default_dict[key])
                     elif key in {"addition_bounds", "multiplication_bounds"}:
-                        if isinstance(value, list) and len(value) == 4:
+                        # The settings UI indexes all four values, so reject
+                        # partial or malformed ranges rather than leaving it
+                        # with an object that will fail when displayed.
+                        if (
+                            isinstance(value, list)
+                            and len(value) == 4
+                            and all(isinstance(item, (int, float)) and math.isfinite(item) for item in value)
+                        ):
                             merged[key] = list(value)
                         else:
                             merged[key] = list(default_dict[key])
+                    elif key == "game_duration":
+                        if isinstance(value, (int, float)) and math.isfinite(value):
+                            merged[key] = value
+                    elif key == "flash_volume":
+                        if isinstance(value, int) and 1 <= value <= 100:
+                            merged[key] = value
+                        elif isinstance(value, float) and math.isfinite(value):
+                            merged[key] = min(100, max(1, int(value)))
+                        else:
+                            merged[key] = default_dict[key]
+                    elif key == "no_log":
+                        if isinstance(value, int):
+                            merged[key] = value
                     else:
                         merged[key] = value
+                merged['no_log'] &= 0b11
                 return Settings(**merged)
             except Exception:
                 if fallback == "default":
@@ -336,11 +384,12 @@ class AppState:
         return conn
 
     def all_init(self):
-        (self.config_dir / "pyrc.py").touch()
+        RCFILE.touch()
+        RCFILE.chmod(0o600) # naturally close permissions for executed code, though this is a local project so there is little/none security issues - main security issues would come from horizontal privesc
         try:
-            with open(str(self.config_dir / "pyrc.py"), "r") as f:
+            with open(RCFILE, "r") as f:
                 rc = f.read()
-            exec(rc)
+            exec(rc, globals(), globals())
         except Exception as e:
             dbgf.write(f"Error whilst loading pyrc.py: {e}")
 
@@ -392,6 +441,58 @@ def generate_problem(settings: Settings) -> tuple[str, int]:
             a = 1
         product = a * b
         return f"{product} / {a}", int(b)
+
+
+# The operands used by the built-in times-table generator.  ``tt`` changes
+# these for the current process; it intentionally does not persist them.
+tt_a: list[int] = []
+tt_b: list[int] = []
+
+
+def _tt() -> tuple[str, int]:
+    """Generate one multiplication question from the lists configured by tt."""
+    a = random.choice(tt_a)
+    b = random.choice(tt_b)
+    return f"{a} * {b}", int(a * b)
+
+
+def resolve_generation_function(value):
+    """Resolve either a function object or a global function name to a callable."""
+    if value is None:
+        return None
+    if callable(value):
+        return value
+    if isinstance(value, str):
+        func = globals().get(value)
+        if func is None or not callable(func):
+            return None
+        return func
+    return None
+
+
+def tt(b: list[int], a: list[int] = [], settings=None) -> None:
+    """Use selected multiplication operands for PlayScreen's generator.
+
+    Empty operand lists inherit the corresponding current multiplication range.
+    When called from ``pyrc.py`` without ``settings``, the running app's global
+    settings are used.
+    """
+    global tt_a, tt_b
+
+    if settings is None:
+        settings = globals().get("state", None)
+        settings = settings.settings if settings is not None else Settings()
+
+    bounds = settings.multiplication_bounds[:4]
+    lo_a, hi_a, lo_b, hi_b = (int(value) for value in bounds)
+    if lo_a > hi_a:
+        lo_a, hi_a = hi_a, lo_a
+    if lo_b > hi_b:
+        lo_b, hi_b = hi_b, lo_b
+
+    tt_a = list(a) if a else list(range(lo_a, hi_a + 1))
+    tt_b = list(b) if b else list(range(lo_b, hi_b + 1))
+    settings.generation_function = _tt.__name__
 
 
 def parse_answer(raw: str) -> int | float | None:
@@ -507,8 +608,9 @@ def compute_timeline(logs: dict[str, str]) -> list[tuple[float, str]]:
         timeline.append((float(key), expression))
     return timeline
 
-
-async def beep(duration: float = 1.0) -> None:
+# still doesn't work lmao
+# might just be miniaudio's fault but idk
+async def beep(duration: float = 1.0, volume: int = 100) -> None:
     dbgf.write("beep\n")
     sound_path = Path(__file__).parent.resolve() / "assets" / "beep.wav"
     sound_str = str(sound_path)
@@ -518,58 +620,76 @@ async def beep(duration: float = 1.0) -> None:
             import miniaudio
             sound = miniaudio.stream_file(sound_str)
             device = miniaudio.PlaybackDevice()
+
+            volume = max(1, min(100, int(volume)))
+            if volume != 100:
+                def scaled_sound(source):
+                    # Transparent proxy generator: forwards whatever the
+                    # consumer sends (frame_count) into the underlying
+                    # stream generator, and scales the returned samples.
+                    value = None
+                    while True:
+                        try:
+                            frame = next(source) if value is None else source.send(value)
+                        except StopIteration:
+                            return
+                        if isinstance(frame, array.array) and frame.typecode == 'h':
+                            frame = array.array(
+                                'h',
+                                (max(-32768, min(32767, int(s * volume / 100))) for s in frame),
+                            )
+                        value = yield frame
+                sound = scaled_sound(sound)
+
             device.start(sound)
             await asyncio.sleep(duration)
             device.stop()
             device.close()
-            dbgf.write(f"miniaudio succeeded\n")
+            dbgf.write("miniaudio succeeded\n")
             return
-        except (ImportError, Exception) as e:
+        except Exception as e:
             dbgf.write(f"miniaudio failed - {e}\n")
-            pass
 
-
-        if sys.platform == "linux":
-            dbgf.write("using linux\n")
-            for player, args in (
-                ("ffplay", ["-nodisp", "-autoexit", "-t", str(duration), sound_str]),
-                ("timeout", [str(duration), "aplay", sound_str]),
-                ("timeout", [str(duration), "paplay", sound_str]),
-            ):
-                playerrealname = args[1] if player == "timeout" else player
-                is_timeout_wrapped = player == "timeout"
-                try:
-                    proc = await asyncio.create_subprocess_exec(
-                        player, *args,
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-                    )
-                    rc = await proc.wait()
-                    success = rc == 0 or (is_timeout_wrapped and rc in (124, 143))
-                    if success:
-                        dbgf.write(f"{playerrealname} succeeded\n")
-                        return
-                    dbgf.write(f"{playerrealname} exited with code {rc}\n")
-                except FileNotFoundError:
-                    dbgf.write(f"{playerrealname} not found\n")
-                except Exception as e:
-                    dbgf.write(f"{playerrealname} failed - {e}\n")
-            # all linux players failed - fall through to terminal bell below
-
-
-
-        elif sys.platform == "darwin":
+    if sys.platform == "linux":
+        dbgf.write("using linux\n")
+        normalized_volume = str(max(0.01, min(1.0, volume / 100)))
+        for player, args in (
+            ("ffplay", ["-nodisp", "-autoexit", "-t", str(duration), "-volume", normalized_volume, sound_str]),
+            ("timeout", [str(duration), "aplay", sound_str]),
+            ("timeout", [str(duration), "paplay", sound_str]),
+        ):
+            playerrealname = args[1] if player == "timeout" else player
+            is_timeout_wrapped = player == "timeout"
             try:
                 proc = await asyncio.create_subprocess_exec(
-                    "afplay", "-t", str(duration), sound_str,
+                    player, *args,
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
                 )
                 rc = await proc.wait()
-                if rc == 0:
+                success = rc == 0 or (is_timeout_wrapped and rc in (124, 143))
+                if success:
+                    dbgf.write(f"{playerrealname} succeeded\n")
                     return
-                dbgf.write(f"afplay exited with code {rc}\n")
+                dbgf.write(f"{playerrealname} exited with code {rc}\n")
+            except FileNotFoundError:
+                dbgf.write(f"{playerrealname} not found\n")
             except Exception as e:
-                dbgf.write(f"afplay failed - {e}\n")
-        
+                dbgf.write(f"{playerrealname} failed - {e}\n")
+        # all linux players failed - fall through to terminal bell below
+
+    elif sys.platform == "darwin":
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "afplay", "-t", str(duration), sound_str,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+            rc = await proc.wait()
+            if rc == 0:
+                return
+            dbgf.write(f"afplay exited with code {rc}\n")
+        except Exception as e:
+            dbgf.write(f"afplay failed - {e}\n")
+
     # windows has native sound generators
     if sys.platform == "win32":
         try:
@@ -580,7 +700,6 @@ async def beep(duration: float = 1.0) -> None:
                 winsound.PlaySound(None, winsound.SND_PURGE)
                 return
             else:
-                # Run blocking hardware beep in a separate thread pool
                 loop = asyncio.get_running_loop()
                 await loop.run_in_executor(None, winsound.Beep, 440, int(duration * 1000))
                 return
@@ -597,9 +716,12 @@ def open_file(tempfname):
         editors = [f"{os.getenv('EDITOR', 'nvim')}", "xdg-open", "open", "notepad.exe", "nvim", "vim", "nano", "vi"]
         for editor in editors:
             if shutil.which(editor):
-                dbgf.write("used editor " + editor + "\n")
-                subprocess.run([editor, tempfname])
-                raise Exception("found!")
+                try:
+                    dbgf.write("used editor " + editor + "\n")
+                    subprocess.run([editor, tempfname])
+                    return
+                except BaseException as e:
+                    dbgf.write(f"Failed to open {tempfname} with {editor}: {e}\n")
         if sys.platform == "linux":
             subprocess.run(["vi", tempfname])
         elif sys.platform == "darwin":
@@ -823,7 +945,7 @@ class SettingsScreen(Screen):
             duration = float(self.query_one("#duration-input", Input).value)
             self.settings.game_duration = duration
         except ValueError:
-            self.settings.game_duration = 120.0
+            self.settings.game_duration = DEFAULT_SETTINGS['game_duration']
 
         self.settings.operations = []
         if self.query_one("#addition-check", Checkbox).value:
@@ -868,11 +990,16 @@ class SettingsScreen(Screen):
             self.save_settings()
             self.parent_view.show_play()
         elif event.button.id == "advanced-settings-btn":
+            # The editor must always receive the complete current Settings
+            # object.  This also preserves a just-selected preset or reverted
+            # settings that has not yet been saved through the normal form.
+            self.parent_view.state.settings = self.parent_view.settings = self.settings
             self.parent_view.state.save_settings(force=True)
             with self.app.suspend():
-                open_file(SETTINGSFILE)
+                open_file(self.parent_view.state.config_path)
             self.parent_view.state.settings = self.parent_view.settings = self.settings = self.parent_view.state.load_settings("self.settings")
             self.update()
+            self.parent_view.clear_annotations()
         elif event.button.id == "revert-settings":
             self.settings = self.parent_view.state.default_settings()
             self.update()
@@ -956,13 +1083,23 @@ class PlayScreen(Screen):
     #answer-input { width: 24; }
     """
 
-    def __init__(self, parent_view: "MainView", problem_factory, settings: Settings, is_replay: bool = False, replay_stats = {}) -> None:
+    def __init__(self, parent_view: "MainView", problem_factory, settings: Settings, is_replay: bool = False, replay_stats = {}, uses_custom_generator: bool | None = None) -> None:
         super().__init__()
         self.parent_view = parent_view
         self.problem_factory = problem_factory
         self.settings = settings
         self.is_replay = is_replay
         self.replay_stats = replay_stats
+        # Infer the flag for direct PlayScreen callers too.  Replay screens
+        # pass their own factory, so a configured custom generator does not
+        # accidentally suppress replay behaviour.
+        resolved_generator = resolve_generation_function(settings.generation_function)
+        self.uses_custom_generator = (
+            bool(settings.generation_function)
+            and problem_factory is resolved_generator
+            if uses_custom_generator is None
+            else uses_custom_generator
+        )
         self.current_problem: tuple[str, float] | None = None
         self.score = 0
         self.elapsed = 0.0
@@ -1007,9 +1144,6 @@ class PlayScreen(Screen):
 
     def next_question(self) -> None:
         if not self.round_running:
-            return
-        if time.monotonic() >= self.question_deadline and not self.is_replay:
-            self.finish_round()
             return
         problem = self.problem_factory()
         if problem is None:
@@ -1075,12 +1209,12 @@ class PlayScreen(Screen):
             self._tick_timer = None
         is_satisfied = all(
             getattr(s, key) == expected_value 
-            for key, expected_value in _DEFAULT_RUN.items()
+            for key, expected_value in _DEFAULT_RUN.items() # internal use, should not be modified since that could introduce bugs
         ) # some fields don't matter, which don't feature in _DEFAULT_RUN
         pb = 0
-        if not s.no_log and not quit_requested and s.cheat_mode == False and is_satisfied:
+        if not s.no_log and not self.uses_custom_generator and not quit_requested and s.cheat_mode == False and is_satisfied:
             logged = 1
-            max_score = run_max(self.parent_view.state.conn)
+            max_score = run_max(self.parent_view.state.conn) # get it BEFORE logging the run
             record_run(self.parent_view.state.conn, "runs", self.score, self.round_logs)
             dbgf.write(f"self.score = {self.score}; max_score = {max_score};\n")
             if self.score > max_score:
@@ -1103,13 +1237,19 @@ class PlayScreen(Screen):
                 "Replay quit!",
             ][val]
         # generate analytics using _analytics function from data_analysis.py
-        summary = _analytics_summary_(json.dumps(self.round_logs))
+        try:
+            summary = _analytics_summary_(json.dumps(self.round_logs))
+        except Exception as exc:
+            summary = f"Unable to compute analytics: {exc}"
         if self.is_replay:
-            special_bit = f"You would have scored {(self.score * self.replay_stats['time_taken'] / (self.elapsed or 0.01)):.2f} with the normal time. " if self.replay_stats["type"] == "replay" else f"Originally, you took {'around ' if quit_requested else ''}{(self.replay_stats['time_taken'] * self.score / self.replay_stats['question_number']):.2f} seconds. "
+            # if it is a replay_hardest, just display the finish time and original finish time
+            # otherwise, display what the user would have scored with the normal time, and what they originally took
+            special_bit = f"You would have scored {(self.score * self.replay_stats['time_taken'] / (self.elapsed or 0.01)):.2f} with the normal time. " if self.replay_stats["type"] == "replay" else f"Originally, you took {'around ' if quit_requested else ''}{(self.replay_stats['time_taken'] * self.score / (self.replay_stats['question_number'] or 0.01)):.2f} seconds. "
             detail = f"{header}\n\nTime taken: {self.elapsed:.2f}s\n" + special_bit + f"\nSummary:\n{summary}"
         else:
-            detail = f"{header}\n{'Logged run!' if logged else 'On this pace, you would have scored ~' + str(round(self.score * 120 / self.elapsed, 2)) + f' if you had finished the run. ' if quit_requested else ''}\nScore: {self.score}{f'; Time taken: {self.elapsed:.1f}' if quit_requested else ''}\nSummary:\n{summary}"
+            detail = f"{header}\n{'Logged run!' if logged else 'On this pace, you would have scored ~' + str(round(self.score * DEFAULT_SETTINGS['game_duration'] / (self.elapsed or 0.01), 2)) + f' if you had finished the run. ' if quit_requested else ''}\nScore: {self.score}{f'; Time taken: {self.elapsed:.1f}' if quit_requested else ''}\nSummary:\n{summary}"
         self.parent_view.query_one("#detail", Label).update(detail)
+        # this may be confusing to look at, but **THIS IS NOT BUGGED**. through testing, one can see that everything is printed correctly
         self.app.pop_screen()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -1119,7 +1259,7 @@ class PlayScreen(Screen):
     def tick(self) -> None:
         if self.round_running:
             self.elapsed = max(0.0, time.monotonic() - self.start_time)
-            if self.is_replay:
+            if self.is_replay or self.settings.game_duration == -1:
                 pass
                 self.query_one("#time-left", Label).update(f"Seconds used: {self.elapsed:.0f}")
             else:
@@ -1162,7 +1302,7 @@ class ReplaySelectionScreen(Screen):
     }
     """
 
-    def __init__(self, parent_view: "MainView", available_runs: list[dict], default_id: int, mode: str = "replay") -> None:
+    def __init__(self, parent_view: "MainView", default_id: int, mode: str = "replay") -> None:
         super().__init__()
         self.parent_view = parent_view
         # Metadata is deliberately fetched in pages below.  ``available_runs``
@@ -1279,11 +1419,11 @@ class ReplaySelectionScreen(Screen):
 
         try:
             with self.app.suspend():
-                tempf = tempfile.NamedTemporaryFile(prefix="zetamac-tui_", suffix=".json")
+                tempf = tempfile.NamedTemporaryFile(prefix="zetamac-tui_", suffix=".json", delete=False) # delete after editing to accomodate windows systems
                 tempf.write(json.dumps(run, indent="\t").encode("utf-8"))
                 tempf.flush()
-                open_file(tempf.name)
                 tempf.close()
+                open_file(tempf.name)
         except Exception as e:
             self.query_one("#run-summary", Label).update(
                 f"Error whilst opening json: {e}"
@@ -1302,6 +1442,9 @@ class ReplaySelectionScreen(Screen):
         if self.selected_run_id is None:
             return
         self._select_or_activate(self.selected_run_id)
+
+    def key_escape(self) -> None:
+        self.app.pop_screen()
 
     def action_request_delete(self) -> None:
         """Require a second Delete press before permanently removing a run."""
@@ -1493,7 +1636,7 @@ class FlashAnzan(Screen):
                 return
             number_label.update(self.fmt(str(number)))
             timer_const = 0.5
-            t = asyncio.create_task(beep(duration*timer_const))
+            t = asyncio.create_task(beep(duration*timer_const, self.settings.flash_volume))
             self._tasks.add(t)
             self.flashed_count += 1
             self.flashed_count_label.update(f"{self.flashed_count} / {self.settings.flash_number}")
@@ -1530,7 +1673,11 @@ class FlashAnzan(Screen):
         self.playing = False
         if self._flash_worker is not None:
             self._flash_worker.cancel()
+        self.parent_view.clear_annotations()
         self.app.pop_screen()
+
+    def key_escape(self) -> None:
+        self.quit()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "flash-quit":
@@ -1552,7 +1699,7 @@ class MainView(App):
     Screen { background: #111111; color: white; }
     #menu-list { height: 8.5; }
     #status { padding: 1 2; }
-    #detail { padding: 1 2; }
+    #detail { padding: 1 2; text-wrap: wrap; }
     .spacer {
         width: 1fr;
     }
@@ -1652,7 +1799,19 @@ class MainView(App):
             self.exit()
 
     def show_play(self) -> None:
-        self.push_screen(PlayScreen(self, problem_factory=lambda: generate_problem(self.settings), settings=self.settings))
+        custom_generator = resolve_generation_function(self.settings.generation_function)
+        if self.settings.generation_function is not None and custom_generator is None:
+            self.query_one("#detail", Label).update(f"[red]Error[/]: Could not resolve generation function '{self.settings.generation_function}'. \nPlease check if the function is defined,\n or turn this off by going to Settings --> Advanced/json...,\n and then replacing \"generation_function\": \"{self.settings.generation_function}\" with \"generation_function\": null. ")
+            return
+        problem_factory = custom_generator if custom_generator else (lambda: generate_problem(self.settings))
+        self.push_screen(
+            PlayScreen(
+                self,
+                problem_factory=problem_factory,
+                settings=self.settings,
+                uses_custom_generator=bool(custom_generator),
+            )
+        )
 
     def show_settings(self) -> None:
         self.push_screen(SettingsScreen(self))
@@ -1661,20 +1820,20 @@ class MainView(App):
         self.push_screen(FlashAnzan(self))
 
     def show_replay(self) -> None:
-        recent_runs = get_recent_runs(self.state.conn, limit=10)
-        if not recent_runs:
+        latest_run = get_recent_runs(self.state.conn, limit=1)
+        if not latest_run:
             self.query_one("#detail", Label).update("No runs available yet.")
             return
-        latest_id = int(recent_runs[0]["id"])
-        self.push_screen(ReplaySelectionScreen(self, recent_runs, latest_id, mode="replay"))
+        latest_id = int(latest_run[0]["id"])
+        self.push_screen(ReplaySelectionScreen(self, latest_id, mode="replay"))
 
     def show_runs(self) -> None:
-        all_runs = get_all_run_metadata(self.state.conn)
-        if not all_runs:
+        latest_run = get_recent_runs(self.state.conn, limit=1)
+        if not latest_run:
             self.query_one("#detail", Label).update("No runs available yet.")
             return
-        latest_id = int(all_runs[0]["id"])
-        self.push_screen(ReplaySelectionScreen(self, all_runs, latest_id, mode="browse"))
+        latest_id = int(latest_run[0]["id"])
+        self.push_screen(ReplaySelectionScreen(self, latest_id, mode="browse"))
 
     def sqlite3_shell(self):
         with self.suspend():
@@ -1712,8 +1871,8 @@ class MainView(App):
             try:
                 os.system("cls" if os.name == "nt" else "clear")
                 code.interact(local=repl_locals, banner=banner)
-            except Exception as e:
-                dbgf.write(str(e))
+            except BaseException as e: # need to catch SystemExit
+                dbgf.write(str(e)+"\n")
 
     def _launch_replay(self, selected_id: int, fallback_id: int) -> None:
         run = get_run(self.state.conn, selected_id)
@@ -1722,14 +1881,14 @@ class MainView(App):
         if run is None:
             self.query_one("#detail", Label).update("No runs available yet.")
             return
-        self.settings.no_log += 2
+        self.settings.no_log |= 2
         self.push_screen(
             PlayScreen(
                 self,
                 problem_factory=ReplayProblemFactory(run.get("logs") or {}),
                 settings=self.settings,
                 is_replay=True,
-                replay_stats={"time_taken": 120, "type": "replay", "question_number": len(run["logs"])},
+                replay_stats={"time_taken": DEFAULT_SETTINGS['game_duration'], "type": "replay", "question_number": len(run["logs"])}, # logged will always be default
             )
         )
 
@@ -1857,6 +2016,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
-

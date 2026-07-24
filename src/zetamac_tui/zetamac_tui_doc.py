@@ -21,7 +21,12 @@ Attributes:
     flash_digits (int): Digits shown per flash in Flash Anzan mode.
     flash_duration (float): Seconds each flash digit stays visible.
     flash_number (int): How many digits to flash before the answer prompt.
-    overrides (dict[str, str]): Named hooks for custom operand generators.
+    flash_volume (int): Volume for flash sounds, from 1 (quiet) to 100 (full).
+    generation_function (callable | None): Optional runtime-only question
+        generator.  A truthy callable returning ``(expression, answer)`` is
+        used by PlayScreen instead of generate_problem.  Custom-generator runs
+        are not saved to the runs database.  This value is not stored in
+        settings.json; falsey values use the normal generator.
     save_settings_state (bool): When False, in-app edits are not persisted.
 
 Loaded from ~/.config/zetamac-tui/settings.json via AppState.load_settings().
@@ -31,6 +36,8 @@ Example:
     >>> settings.game_duration = 60
     >>> settings.operations = ["+", "-"]
     >>> state.save_settings()
+
+    >>> settings.generation_function = lambda: ("6 * 7", 42)
 """
 
 
@@ -96,6 +103,26 @@ Returns:
 Example:
     >>> expr, ans = generate_problem(settings)
     >>> print(expr, "=>", ans)
+"""
+
+
+TT_DOC = """
+Configure the built-in times-table generator for PlayScreen.
+
+Args:
+    a: Allowed values for the left-hand multiplier.
+    b: Allowed values for the right-hand multiplier. Defaults to an empty
+       list.
+    settings: Settings to update. When omitted, uses the running app's global
+       state.settings.
+
+Empty operand lists expand to the corresponding current multiplication range.
+The function sets settings.generation_function to _tt.  This is a runtime-only
+override, so its games are not logged and it is not written to settings.json.
+
+Examples:
+    >>> tt([6, 7], [2, 3])
+    >>> tt([], [12], settings)  # current left-hand range × 12
 """
 
 
@@ -244,6 +271,7 @@ Variables available in this session:
                 conn.execute("SELECT * FROM runs").fetchall()
 
   generate_problem(settings)  -> (expression_str, answer) new problem
+  tt(a, b=[], settings=None)   configure an unlogged times-table run
   compute_timeline(logs)      -> sorted [(elapsed_seconds, expression), ...]
 
 User helper functions (from userfuncs.py):
@@ -282,6 +310,7 @@ def apply_repl_docs(namespace: dict[str, Any]) -> None:
         ("Settings", SETTINGS_DOC),
         ("AppState", APP_STATE_DOC),
         ("generate_problem", GENERATE_PROBLEM_DOC),
+        ("tt", TT_DOC),
         ("compute_timeline", COMPUTE_TIMELINE_DOC),
         ("record_run", RECORD_RUN_DOC),
         ("get_recent_runs", GET_RECENT_RUNS_DOC),
