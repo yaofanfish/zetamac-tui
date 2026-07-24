@@ -1739,6 +1739,8 @@ class MainView(App):
 
         self.state.all_init()
 
+        self.theme = "textual-dark" # looks the best
+
         # closer to the real zetamac experience
         self.show_settings()
 

@@ -7,5 +7,9 @@ Fixed all metadata issue
 ## 1.0.0 - 2026-07-24
 Initial stable 1.0.0 release
 - Bump package version to 1.0.0
-- Ensure tests pass and fix settings/AppState behavior
-- Packaging configured for src layout; entry points verified
+
+## 1.0.1 - 2026-07-24
+Fixed some minor issues, like my .bash_history file being in here
+- Default theme is now textual-dark, which is what it was developed under
+
+
