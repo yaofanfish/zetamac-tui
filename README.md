@@ -9,9 +9,9 @@ TUI zetamac clone (identical core interface) plus SQLite tracking, replay, and f
 ## Screenshots
 
 <!-- https://raw.githubusercontent.com/yaofanfish/zetamac-tui/refs/heads/main -->
-![Settings](https://raw.githubusercontent.com/yaofanfish/zetamac-tui/refs/heads/main/assets/63dd43f7-3f04-4e29-a218-b13fdf09415e.png)
-![Play](https://raw.githubusercontent.com/yaofanfish/zetamac-tui/refs/heads/main/assets/16c844ea-70ce-4e1a-9d76-011f095fc959.png)
-![View runs](https://raw.githubusercontent.com/yaofanfish/zetamac-tui/refs/heads/main/assets/c63567db-c70a-4e45-a05c-efcdf6736680.png)
+<img src="https://raw.githubusercontent.com/yaofanfish/zetamac-tui/refs/heads/main/assets/63dd43f7-3f04-4e29-a218-b13fdf09415e.png" width="600" alt="Settings">
+<img src="https://raw.githubusercontent.com/yaofanfish/zetamac-tui/refs/heads/main/assets/16c844ea-70ce-4e1a-9d76-011f095fc959.png" width="600" alt="Play">
+<img src="https://raw.githubusercontent.com/yaofanfish/zetamac-tui/refs/heads/main/assets/c63567db-c70a-4e45-a05c-efcdf6736680.png" width="600" alt="View runs">
 
 ## Features
 

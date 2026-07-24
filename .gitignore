@@ -10,3 +10,4 @@ src/zetamac_tui/Makefile
 *.onefile-build/
 dist/
 .pytest_cache/
+README.html
