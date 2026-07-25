@@ -1719,7 +1719,7 @@ class MainView(App):
         super().__init__()
         self.state = state
         self.settings = state.settings
-        self.menu_items = ["Settings", "Play", "Flash Anzan", "Replay", "Replay Hardest", "View Runs and Stats", "SQLite3 shell", "Python repl", "Quit"]
+        self.menu_items = ["Settings", "Play", "Replay", "Replay Hardest", "View Runs and Stats", "Flash Anzan", "SQLite3 shell", "Python repl", "Quit"]
         self.selected = 0
 
     def compose(self) -> ComposeResult:
