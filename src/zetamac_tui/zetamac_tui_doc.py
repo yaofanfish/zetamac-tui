@@ -239,7 +239,7 @@ class ReplHelp:
     """
 
     _OVERVIEW = """
-zetamac-tui semi-internals (intentially exposed functions for the user) -- quick reference
+zetamac-tui semi-internals (intentionally exposed functions for the user) -- quick reference
 ===================================
 
 Variables available in this session:

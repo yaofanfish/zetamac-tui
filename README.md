@@ -19,7 +19,7 @@ TUI zetamac clone (identical core interface) plus SQLite tracking, replay, and f
 ## Features
 
 * **All features** from arithmetic.zetamac.com with an identical interface and functionality (as shown above), like addition, subtraction, division. 
-* Local SQLite run history with per-problem timings (only runs with default setting though, otherwise everything gets jumbled and you can't track data effectively)
+* Local SQLite run history with per-problem timings (only runs with default setting though)
 * A pretty interface for selecting runs with summaries for each
 * Able to replay any run, or replay all the hardest questions (questions which took the longest time)
 * Per-run analytics to identify weak spots
