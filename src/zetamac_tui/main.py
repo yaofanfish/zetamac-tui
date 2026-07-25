@@ -713,7 +713,13 @@ async def beep(duration: float = 1.0, volume: int = 100) -> None:
 def open_file(tempfname):
     import shutil
     try:
-        editors = [f"{os.getenv('EDITOR', 'nvim')}", "xdg-open", "open", "notepad.exe", "nvim", "vim", "nano", "vi"]
+        try:
+            if sys.platform == "win32":
+                os.startfile(tempfname)
+                return
+        except:
+            pass
+        editors = [f"{os.getenv('EDITOR', 'xdg-open')}", "xdg-open", "open", "nvim", "vim", "nano", "vi", "micro", "helix", "edit", "notepad++", "notepad"]
         for editor in editors:
             if shutil.which(editor):
                 try:
@@ -722,12 +728,6 @@ def open_file(tempfname):
                     return
                 except BaseException as e:
                     dbgf.write(f"Failed to open {tempfname} with {editor}: {e}\n")
-        if sys.platform == "linux":
-            subprocess.run(["vi", tempfname])
-        elif sys.platform == "darwin":
-            subprocess.run(["vim", tempfname]) # vim is installed by default
-        elif sys.platform == "win32":
-            os.startfile(tempfname)
         subprocess.run(["nano", tempfname])
     except:
         pass
@@ -2013,7 +2013,7 @@ def main() -> None:
         import miniaudio
         import pyfiglet
     except:
-        print("\x1b[31mYou have not installed the [opt] dependencies for this project, which means that some features may not work as well for you. If you change you mind, run\n\tpipx install -e zetamac-tui[opt] # do [dev,opt] if you want the dev stuff too")
+        print("\x1b[31mYou have not installed the [opt] dependencies for this project, which means that some features may not work as well for you. If you change your mind, run: \n\x1b[36m(if you used pipx to install)\n\t\x1b[0mpipx install --force \"zetamac-tui[opt]\" # do [dev,opt] if you want the dev stuff too\n\x1b[36m(if you used pip to install)\n\t\033[0mpip install --upgrade \"zetamac-tui[opt]\" # do [dev,opt] if you want the dev stuff too")
 
 
 if __name__ == "__main__":
