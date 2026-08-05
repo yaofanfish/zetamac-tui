@@ -47,6 +47,15 @@ subprocess = lazy_import("subprocess")
 time = lazy_import("time")
 random = lazy_import("random")
 
+try:
+    if sys.platform != "win32":
+        dbgf = open("/tmp/zetamac-tui-debug.log", "w", encoding="utf-8", buffering=1)
+    else:
+        dbgf = open(os.path.join(os.getenv("LOCALAPPDATA", HOME / "AppData" / "Local"), "zetamac-tui-debug.log"), "w", encoding="utf-8", buffering=1)
+except:
+    # error occurred
+    dbgf = sys.stderr
+
 # NOTE: data_anlysis.py
 
 def _analytics(json_logs, id = None) -> dict:
@@ -136,7 +145,7 @@ def ids_info(conn=None):
             if type(conn) != sqlite3.Connection:
                 raise Exception("not a conn")
         except:
-            conn = sqlite3.connect(LOCALSHAREDIR / "runs.db")
+            conn = sqlite3.connect(RUNSDB)
 
     today = datetime.date.today().isoformat()
     tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
@@ -202,26 +211,26 @@ def run_max_today(conn=None):
 
 # NOTE: END: data_analysis.py
 
+# from README.md:
+"""
+* Settings: `~/.local/state/zetamac-tui/settings.json` (`%LOCALAPPDATA%\zetamac-tui\settings.json` on windows)
+* Run history: `~/.local/share/zetamac-tui/runs.db` (`%LOCALAPPDATA%\zetamac-tui\runs.db` on windows)
+* Python rc file: `~/.config/zetamac-tui/pyrc.py` (`%APPDATA%\zetamac-tui\pyrc.py` on windows)
+"""
 
+HOME = Path.home().resolve()
 
+CONFIGDIR = HOME / ".config" / "zetamac-tui" if sys.platform != "win32" else Path(os.getenv("APPDATA", HOME / "AppData" / "Roaming")) / "zetamac-tui"
 
-HOME = (Path.home() / "Appdata" / "Local" / "zetamac-tui" if os.name == "nt" else Path.home()).resolve()
+LOCALSHAREDIR = HOME / ".local" / "share" / "zetamac-tui" if sys.platform != "win32" else Path(os.getenv("LOCALAPPDATA", HOME / "AppData" / "Local")) / "zetamac-tui"
 
-CONFIGDIR = HOME / ".config" / "zetamac-tui"
+LOCALSTATEDIR = HOME / ".local" / "state" / "zetamac-tui" if sys.platform != "win32" else Path(os.getenv("LOCALAPPDATA", HOME / "AppData" / "Local")) / "zetamac-tui"
 
-LOCALSHAREDIR = HOME / ".local" / "share" / "zetamac-tui"
+SETTINGSFILE = LOCALSTATEDIR / "settings.json" if sys.platform != "win32" else Path(os.getenv("LOCALAPPDATA", HOME / "AppData" / "Local")) / "zetamac-tui" / "settings.json" # on windows, this would be C:\Users\<username>\AppData\Local\zetamac-tui\settings.json
 
-LOCALSTATEDIR = HOME / ".local" / "state" / "zetamac-tui"
+RCFILE = CONFIGDIR / "pyrc.py" if sys.platform != "win32" else Path(os.getenv("APPDATA", HOME / "AppData" / "Roaming")) / "zetamac-tui" / "pyrc.py" # on windows, this would be C:\Users\<username>\AppData\Roaming\zetamac-tui\pyrc.py
 
-SETTINGSFILE = LOCALSTATEDIR / "settings.json"
-
-RCFILE = CONFIGDIR / "pyrc.py"
-
-try:
-    dbgf = open("/tmp/zetamac-tui-debug.log", "w", encoding="utf-8", buffering=1)
-except:
-    # windows / error occurred
-    dbgf = sys.stderr
+RUNSDB = LOCALSHAREDIR / "runs.db" if sys.platform != "win32" else Path(os.getenv("LOCALAPPDATA", HOME / "AppData" / "Local")) / "zetamac-tui" / "runs.db" # on windows, this would be C:\Users\<username>\AppData\Local\zetamac-tui\runs.db
 
 @dataclass
 class Settings:
@@ -250,7 +259,7 @@ class Settings:
             data["generation_function"] = None
         return data
 
-def sql_sh(conn=(HOME / ".local" / "share" / "zetamac-tui" / "runs.db")):
+def sql_sh(conn=RUNSDB):
     if type(conn) == sqlite3.Connection:
         path = conn.execute(
             "SELECT file FROM pragma_database_list WHERE name = 'main';"
@@ -283,7 +292,7 @@ class AppState:
         # settings file lives inside the config dir
         self.config_path = Path(self.config_dir) / "settings.json"
         # allow overriding database path for tests
-        self.db_path = Path(db_path) if db_path is not None else (LOCALSHAREDIR / "runs.db")
+        self.db_path = Path(db_path) if db_path is not None else RUNSDB
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.settings = self.load_settings()
         self.conn = self.open_db()
