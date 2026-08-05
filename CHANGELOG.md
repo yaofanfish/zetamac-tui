@@ -12,3 +12,7 @@ Fixed some minor issues, including removing an accidental bash history file.
 ## 1.0.2
 Grammar mistakes corrected
 Made windows experience better
+
+## 1.0.3
+Improved windows experience
+- Windows is now also first-class, and has proper paths

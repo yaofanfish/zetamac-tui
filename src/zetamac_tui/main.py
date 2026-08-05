@@ -212,7 +212,7 @@ def run_max_today(conn=None):
 # NOTE: END: data_analysis.py
 
 # from README.md:
-"""
+r"""
 * Settings: `~/.local/state/zetamac-tui/settings.json` (`%LOCALAPPDATA%\zetamac-tui\settings.json` on windows)
 * Run history: `~/.local/share/zetamac-tui/runs.db` (`%LOCALAPPDATA%\zetamac-tui\runs.db` on windows)
 * Python rc file: `~/.config/zetamac-tui/pyrc.py` (`%APPDATA%\zetamac-tui\pyrc.py` on windows)

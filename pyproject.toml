@@ -1,6 +1,6 @@
 [project]
 name = "zetamac-tui"
-version = "1.0.2"
+version = "1.0.3"
 description = "Zetamac clone (identical core interface) plus SQLite tracking, replay, and flash anzan (also mental arithmetic)"
 readme = "README.md"
 requires-python = ">=3.10"
