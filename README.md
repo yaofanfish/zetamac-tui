@@ -44,6 +44,13 @@ pipx install "zetamac-tui[opt]"
 ```bash
 pip install "zetamac-tui[opt]"
 ```
+---
+
+### Install from AUR (Arch linux)
+
+```bash
+yay -S zetamac-tui-git
+```
 
 ---
 
