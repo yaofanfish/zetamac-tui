@@ -46,7 +46,7 @@ pip install "zetamac-tui[opt]"
 ```
 ---
 
-### Install from AUR (Arch linux)
+### Install from ![AUR](https://aur.archlinux.org/packages/zetamac-tui-git) (Arch linux)
 
 ```bash
 yay -S zetamac-tui-git
