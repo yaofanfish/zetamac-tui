@@ -46,12 +46,11 @@ signal = lazy_import("signal")
 subprocess = lazy_import("subprocess")
 time = lazy_import("time")
 random = lazy_import("random")
+platformdirs = lazy_import("platformdirs")
 
 try:
-    if sys.platform != "win32":
-        dbgf = open("/tmp/zetamac-tui-debug.log", "w", encoding="utf-8", buffering=1)
-    else:
-        dbgf = open(os.path.join(os.getenv("LOCALAPPDATA", HOME / "AppData" / "Local"), "zetamac-tui-debug.log"), "w", encoding="utf-8", buffering=1)
+    debug_log_path = Path(platformdirs.user_cache_dir("zetamac-tui")) / "zetamac-tui-debug.log"
+    dbgf = open(debug_log_path, "w", encoding="utf-8", buffering=1)
 except:
     # error occurred
     dbgf = sys.stderr
@@ -218,19 +217,11 @@ r"""
 * Python rc file: `~/.config/zetamac-tui/pyrc.py` (`%APPDATA%\zetamac-tui\pyrc.py` on windows)
 """
 
-HOME = Path.home().resolve()
+DEFAULTCONFIGDIR = Path(platformdirs.user_config_dir("zetamac-tui"))
+DATADIR = Path(platformdirs.user_data_dir("zetamac-tui"))
+STATEDIR = Path(platformdirs.user_state_dir("zetamac-tui"))
 
-CONFIGDIR = HOME / ".config" / "zetamac-tui" if sys.platform != "win32" else Path(os.getenv("APPDATA", HOME / "AppData" / "Roaming")) / "zetamac-tui"
-
-LOCALSHAREDIR = HOME / ".local" / "share" / "zetamac-tui" if sys.platform != "win32" else Path(os.getenv("LOCALAPPDATA", HOME / "AppData" / "Local")) / "zetamac-tui"
-
-LOCALSTATEDIR = HOME / ".local" / "state" / "zetamac-tui" if sys.platform != "win32" else Path(os.getenv("LOCALAPPDATA", HOME / "AppData" / "Local")) / "zetamac-tui"
-
-SETTINGSFILE = LOCALSTATEDIR / "settings.json" if sys.platform != "win32" else Path(os.getenv("LOCALAPPDATA", HOME / "AppData" / "Local")) / "zetamac-tui" / "settings.json" # on windows, this would be C:\Users\<username>\AppData\Local\zetamac-tui\settings.json
-
-RCFILE = CONFIGDIR / "pyrc.py" if sys.platform != "win32" else Path(os.getenv("APPDATA", HOME / "AppData" / "Roaming")) / "zetamac-tui" / "pyrc.py" # on windows, this would be C:\Users\<username>\AppData\Roaming\zetamac-tui\pyrc.py
-
-RUNSDB = LOCALSHAREDIR / "runs.db" if sys.platform != "win32" else Path(os.getenv("LOCALAPPDATA", HOME / "AppData" / "Local")) / "zetamac-tui" / "runs.db" # on windows, this would be C:\Users\<username>\AppData\Local\zetamac-tui\runs.db
+RUNSDB = DATADIR / "runs.db"
 
 @dataclass
 class Settings:
@@ -283,12 +274,12 @@ Needs some weird signal workarounds due to a race condition
 class AppState:
     """Persistent settings and DB connection (see zetamac_tui_doc.APP_STATE_DOC)."""
     def __init__(self, config_dir: str | Path | None = None, db_path: str | Path | None = None) -> None:
-        self.home = HOME
         # allow tests and callers to override locations
-        self.config_dir = Path(config_dir) if config_dir is not None else CONFIGDIR
+        self.config_dir = Path(config_dir) if config_dir is not None else DEFAULTCONFIGDIR
         self.config_dir.mkdir(parents=True, exist_ok=True)
-        self.localstate_dir = LOCALSTATEDIR
-        self.localstate_dir.mkdir(parents=True, exist_ok=True)
+        self.state_dir = STATEDIR
+        self.state_dir.mkdir(parents=True, exist_ok=True)
+        self.rcfile = self.config_dir / "pyrc.py"
         # settings file lives inside the config dir
         self.config_path = Path(self.config_dir) / "settings.json"
         # allow overriding database path for tests
@@ -393,10 +384,10 @@ class AppState:
         return conn
 
     def all_init(self):
-        RCFILE.touch()
-        RCFILE.chmod(0o600) # naturally close permissions for executed code, though this is a local project so there is little/none security issues - main security issues would come from horizontal privesc
+        self.rcfile.touch()
+        self.rcfile.chmod(0o600) # naturally close permissions for executed code, though this is a local project so there is little/none security issues - main security issues would come from horizontal privesc
         try:
-            with open(RCFILE, "r") as f:
+            with open(self.rcfile, "r") as f:
                 rc = f.read()
             exec(rc, globals(), globals())
         except Exception as e:
