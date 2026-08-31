@@ -72,9 +72,9 @@ Configure settings, start a round, review past runs, or replay difficult questio
 
 ## Data Storage
 
-* Settings: `~/.local/state/zetamac-tui/settings.json` (`%LOCALAPPDATA%\zetamac-tui\settings.json` on windows)
-* Run history: `~/.local/share/zetamac-tui/runs.db` (`%LOCALAPPDATA%\zetamac-tui\runs.db` on windows)
-* Python rc file: `~/.config/zetamac-tui/pyrc.py` (`%APPDATA%\zetamac-tui\pyrc.py` on windows)
+* Settings: `zetamac-tui/settings.json` in the user's state dir
+* Run history: `zetamac-tui/runs.db` in the user's data dir
+* Python rc file: `zetamac-tui/pyrc.py` in the user's config dir
 
 ## Contributing
 
